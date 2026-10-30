@@ -44,8 +44,10 @@ class XrealMonoTests(unittest.TestCase):
     def test_stereo_stitch_preserves_two_views_but_splits_center_frustum(self):
         patched = patch_xreal_stereo_stitch_renderer(self.original)
         expected = {
+            0xC6F90: "c1008052",
             0xC6FB0: "c1008052",
             0xC6FC8: "680a052d",
+            0xC6FEC: "c1008052",
             0xC7010: "c1008052",
             0xC7028: "6226142d",
         }
