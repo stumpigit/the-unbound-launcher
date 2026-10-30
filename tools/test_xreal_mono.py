@@ -4,7 +4,7 @@ import unittest
 import zipfile
 from pathlib import Path
 
-from xreal_mono import LIBRARY, patch_xreal_mono
+from xreal_mono import LIBRARY, patch_xreal_mono, patch_xreal_stereo_transport_mono_renderer
 
 ROOT = Path(__file__).resolve().parents[1]
 BASE = ROOT / "artifacts/unbound-launcher-help/the-unbound-launcher.apk"
@@ -27,6 +27,14 @@ class XrealMonoTests(unittest.TestCase):
             patched[0xC5854:0xC5864].hex(),
             "682a40f908314039490080522101084b",
         )
+
+    def test_keeps_stereo_transport_but_selects_mono_renderer(self):
+        patched = patch_xreal_stereo_transport_mono_renderer(self.original)
+        self.assertEqual(patched[0xC5854:0xC5864], self.original[0xC5854:0xC5864])
+        self.assertEqual(patched[0xC58A4:0xC58A8].hex(), "20008052")
+        changed = [i for i, (old, new) in enumerate(zip(self.original, patched)) if old != new]
+        self.assertGreaterEqual(min(changed), 0xC58A4)
+        self.assertLess(max(changed), 0xC58A8)
 
     def test_rejects_unknown_or_already_patched_library(self):
         patched = patch_xreal_mono(self.original)
