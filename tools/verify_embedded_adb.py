@@ -193,6 +193,7 @@ def verify(apk):
         assert "Ldev/beampro/settings/TermsConsent;" in definitions
         assert "Ldev/beampro/settings/ExperimentalStereo;" in definitions
         assert b"force-3d-sbs" in z.read(definitions["Ldev/beampro/settings/SettingsUi$State;"])
+        assert b"force-2d-mono" in z.read(definitions["Ldev/beampro/settings/SettingsUi$State;"])
         assert b"force-2d-60" not in z.read(definitions["Ldev/beampro/settings/SettingsUi$State;"])
         assert b"Use 60 Hz in 2D" not in z.read(definitions["Ldev/beampro/settings/SettingsUi$State;"])
         for cls in ('AppUpdater', 'UpdateClient', 'ReleaseVersion', 'UpdateInstallActivity', 'UpdateFileProvider'):

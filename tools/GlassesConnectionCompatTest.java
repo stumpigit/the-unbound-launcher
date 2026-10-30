@@ -166,6 +166,26 @@ public final class GlassesConnectionCompatTest {
         m.mNRServiceControl.mode=5;Handler.advance(1000);
         check(m.launches==1,"Continue after the native mode and physical display agree");close(p);
 
+        p=fixture();m=XREALManager.instance;m.waitingDisplay=true;m.mNRServiceControl.mode=9;
+        Context.displays.displays=new Display[]{new Display(4,true,vga,vga)};
+        GlassesConnectionCompat.begin(p);Handler.advance(0);
+        check(m.mNRServiceControl.restored==0,"Do not restore 2D while the glasses are still switching");
+        m.mNRServiceControl.mode=5;Handler.advance(1000);
+        check(m.mNRServiceControl.restored==0,"Give the EDID switch a grace period before declaring it refused");
+        Handler.advance(4000);
+        check(m.mNRServiceControl.restored==9&&m.mNRServiceControl.set2D3DCalls==1,
+                "Restore the pre-switch 2D mode when the EDID refuses stereo");
+        check(ConnectionAnimation.last.failed&&ConnectionAnimation.last.phase.contains("2D"),
+                "The refused 3D switch explains the restored 2D output");
+        Handler.advance(60000);
+        check(m.mNRServiceControl.set2D3DCalls==1&&m.launches==0,"A refused stereo switch restores once instead of looping");close(p);
+
+        p=fixture();m=XREALManager.instance;m.waitingDisplay=true;
+        Context.displays.displays=new Display[]{new Display(4,true,vga,vga)};
+        GlassesConnectionCompat.begin(p);Handler.advance(5000);
+        check(m.mNRServiceControl.set2D3DCalls==0&&ConnectionAnimation.last.failed&&p.success==0,
+                "Without a recorded pre-switch mode the refused switch still fails with recovery instead of a silent crop");close(p);
+
         p=fixture();m=XREALManager.instance;m.waitingDisplay=true;m.target=10;m.mNRServiceControl.mode=10;
         Display.Mode mono=new Display.Mode(10,1920,1080,60f);
         Context.displays.displays=new Display[]{new Display(4,true,mono,mono)};
@@ -290,7 +310,7 @@ public final class GlassesConnectionCompatTest {
         GlassesConnectionCompat.confirm(p);Handler.advance(0);
         boolean freshAttempt=false;for(String[] record:events)if(record[1].equals("begin")&&!record[0].equals(failedAttempt))freshAttempt=true;
         check(freshAttempt&&p.success==1,"Retry uses a fresh diagnostic attempt ID without changing startup success");
-        check(m.mNRServiceControl.queries==0,"Diagnostics do not issue extra native display/status queries");close(p);
+        check(m.mNRServiceControl.queries==2,"Exactly one pre-switch glasses mode query per SDK start and no other native status queries");close(p);
         p=fixture();m=XREALManager.instance;dev.beampro.settings.DebugData.fail=true;
         GlassesConnectionCompat.begin(p);Handler.advance(0);
         check(m.starts==1&&p.success==1,"Diagnostic storage failure cannot break a valid glasses startup");close(p);

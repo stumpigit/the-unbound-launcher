@@ -200,6 +200,16 @@ public final class GlassesConnectionCompat {
                 return null;
             });
             callbacks.put(proxy, new WeakReference<>(s));
+            // Record the glasses mode before the SDK switches its EDID, so a refused
+            // 3D switch can be undone once the physical display disagrees (checkDisplay).
+            try {
+                Object sdk = get(s.manager, "mNRServiceControl");
+                int current = ((Number) call(sdk, "get2D3D")).intValue();
+                boolean ethernet = Boolean.TRUE.equals(get(sdk, "isEthernetSeries"));
+                boolean stereo = ethernet ? current >= 5 && current <= 8
+                        : current == 2 || current == 3 || current == 4 || current == 9;
+                if (!stereo) s.preEdid = current;
+            } catch (Exception unknown) { Log.i(TAG, "No glasses mode recorded before startup"); }
             s.debug("sdk_start", "Calling the original SDK startup path");
             s.sdkInvoked = true;
             call(s.manager, "startSdk", new Class<?>[]{callback}, proxy);
@@ -339,6 +349,8 @@ public final class GlassesConnectionCompat {
         Session waitingFor;
         boolean preparing, success, checkingDisplay, handoffFinished, usbReconfiguration;
         long mtpSince, readySince;
+        int preEdid;
+        long stereoFallbackSince;
         int resumes;
         String phase = "Waiting for glasses USB access";
         ConnectionAnimation animation;
@@ -542,6 +554,7 @@ public final class GlassesConnectionCompat {
         }
         void checkDisplay() {
             boolean ready = false;
+            String fallback = null;
             try {
                 if (!active()) return;
                 Object sdk = get(manager, "mNRServiceControl");
@@ -551,16 +564,43 @@ public final class GlassesConnectionCompat {
                     boolean ethernet = Boolean.TRUE.equals(get(sdk, "isEthernetSeries"));
                     boolean stereo = ethernet ? target >= 5 && target <= 8
                             : target == 2 || target == 3 || target == 4 || target == 9;
-                    for (Display display : displays.getDisplays()) if (DisplayStartupCompat.xreal(display)
-                            && display.getState() == Display.STATE_ON && (!stereo
-                            || (display.getMode().getPhysicalWidth() == 3840 && display.getMode().getPhysicalHeight() == 1080))) ready = true;
-                }
+                    boolean glassesOn = false, stereoModes = false;
+                    for (Display display : displays.getDisplays()) if (DisplayStartupCompat.xreal(display)) {
+                        if (display.getState() == Display.STATE_ON && (!stereo
+                                || (display.getMode().getPhysicalWidth() == 3840 && display.getMode().getPhysicalHeight() == 1080))) ready = true;
+                        if (display.getState() == Display.STATE_ON) glassesOn = true;
+                        for (Display.Mode mode : display.getSupportedModes())
+                            if (mode.getPhysicalWidth() == 3840 && mode.getPhysicalHeight() == 1080) stereoModes = true;
+                    }
+                    // The native mode reports 3D but the EDID never gained 3D modes: the
+                    // glasses refused the switch and show one cropped half per eye. Undo
+                    // it with the mode recorded before startup instead of timing out.
+                    if (stereo && !ready && glassesOn && !stereoModes) {
+                        if (stereoFallbackSince == 0) stereoFallbackSince = SystemClock.uptimeMillis();
+                        else if (SystemClock.uptimeMillis() - stereoFallbackSince >= 4000) {
+                            boolean restored = false;
+                            try {
+                                if (preEdid != 0) {
+                                    call(sdk, "set2D3D", new Class<?>[]{int.class}, preEdid);
+                                    restored = true;
+                                }
+                            } catch (Exception refused) { Log.w(TAG, "Cannot restore the glasses 2D mode", refused); }
+                            debug("stereo_fallback", "target=" + target + "; actual=" + actual + "; restoredEdid=" + preEdid);
+                            fallback = preEdid == 0
+                                    ? "The glasses did not switch to 3D. Reconnect them, or enable Force 2D in Settings to start in 2D."
+                                    : restored ? "The glasses did not switch to 3D, so 2D output was restored. Enable Force 2D in Settings to start in 2D directly."
+                                    : "The glasses did not switch to 3D and 2D could not be restored. Reconnect them, or enable Force 2D in Settings.";
+                        }
+                    } else stereoFallbackSince = 0;
+                } else stereoFallbackSince = 0;
             } catch (Exception error) { Log.w(TAG, "Waiting for display readiness", error); }
             finally {
                 final boolean found = ready;
+                final String failure = fallback;
                 MAIN.post(() -> {
                     checkingDisplay = false;
                     if (!active()) return;
+                    if (failure != null) { fail(failure); return; }
                     long now = SystemClock.uptimeMillis();
                     if (!found) { readySince = 0; return; }
                     if (readySince == 0) { readySince = now; return; }

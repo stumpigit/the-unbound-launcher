@@ -70,7 +70,7 @@ public final class RendererDiagnostics implements Runnable {
                     if (closed || !token.equals(trace.token())) { pending.set(false); return; }
                     sample = "Unity sample wallMs=" + System.currentTimeMillis() + "; uptimeMs=" + SystemClock.uptimeMillis() + "\n" + Native.capture();
                 } catch (Throwable unavailable) { sample = "Unity readback unavailable: " + unavailable.getClass().getSimpleName() + "\n"; }
-                final String value = display + "Force 3D preference=" + ExperimentalStereo.enabled(activity) + "\n" + sample;
+                final String value = display + "Stereo preference=" + ExperimentalStereo.mode(activity) + "\n" + sample;
                 if (closed) { pending.set(false); return; }
                 try { worker.execute(() -> { try { persist(token, value); } catch (Exception ignored) {} finally { pending.set(false); } }); }
                 catch (java.util.concurrent.RejectedExecutionException stopped) { pending.set(false); }

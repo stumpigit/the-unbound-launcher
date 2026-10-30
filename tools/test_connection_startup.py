@@ -122,6 +122,7 @@ STUBS.update({
          public int getOtaNum(String s){throw new AssertionError("OTA update probe during AR startup");}}
        public static class FakeSdk {public com.xreal.glasses.servicesdk.helper.PingGSeriesHelper mPingHelper=new com.xreal.glasses.servicesdk.helper.PingGSeriesHelper();
          public boolean started,isEthernetSeries=true;public int mode=5,stops,queries;public boolean isStartSdk(){return started;}public int get2D3D(){queries++;return mode;}
+         public int restored,set2D3DCalls;public int set2D3D(int v){restored=v;set2D3DCalls++;mode=v;return v;}
          public void stopSdk(){stops++;started=false;}}
        public void startSdk(ISdkStartResult cb){starts++;callback=cb;
          if(networkWait){mNRServiceControl.mPingHelper.callback=(com.xreal.glasses.servicesdk.helper.PingGSeriesHelper.PingCallback)

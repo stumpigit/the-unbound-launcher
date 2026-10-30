@@ -237,3 +237,50 @@ Next steps, none implemented yet:
 - **Diagnostics.** Capture the `port_manager` section separately. Read logs
   from the attempt's start time rather than a fixed tail. Snapshot when a
   non-native mode appears after the stereo switch, not only at the timeout.
+
+## Implemented: refused stereo switch now restores 2D (build 2953 export)
+
+The October 29 export from **Pixel 10 Pro, Android 17 / API 37, app 0.2.2
+alpha build 2953** closes the question left open above. The wearer sees a
+small crop in each eye, the right eye showing the right half of the phone
+mirror. That is the mono 1920 × 1080 mirror reaching glasses that already
+switched to side-by-side, exactly the fallback-output case described there.
+
+The export shows the sequence directly:
+
+1. `display.txt` keeps `supportedModes [{id=71, width=1920, height=1080,
+   fps=60.0}]` for the One Pro before and after the switch. The EDID never
+   gains a 3840 × 1080 mode.
+2. `glasses-control.txt` shows `get2D3D` returning the stereo EDID while the
+   physical display stays 1920 × 1080. The native mode and the hardware
+   disagree, so `checkDisplay` never reports readiness and startup times out.
+3. `app.log` records no `stereo_fallback` event, because none existed yet.
+
+Changes:
+
+- `port-client/src/dev/beampro/port/GlassesConnectionCompat.java` records the
+  glasses mode with `get2D3D` before `startSdk`, keeping it only when that
+  mode is mono. `checkDisplay` now also reads `getSupportedModes`. When the
+  native mode reports stereo, an XREAL display is on, no advertised mode is
+  3840 × 1080, and the state holds for four seconds, it calls
+  `set2D3D` with the recorded mode, logs `stereo_fallback`, and fails with a
+  message that names the restored 2D output instead of a silent crop.
+- `settings-ui/src/dev/beampro/settings/ExperimentalStereo.java` stores a
+  mode byte instead of a boolean: 0 original, 1 force 3D, 2 force 2D. Force
+  2D returns the mode the glasses currently report when the original
+  selection is stereo, so the SDK never requests the switch. `enabled` and
+  `save(boolean)` keep their meaning for the renderer's native reader, which
+  only recognises byte 1.
+- `settings-ui/src/dev/beampro/settings/SettingsUi.java` adds a *Force 2D on
+  3D glasses* switch, mutually exclusive with *Force 3D*.
+- `settings-ui/src/dev/beampro/settings/RendererDiagnostics.java` reports the
+  whole preference byte as `Stereo preference`.
+
+`tools/GlassesConnectionCompatTest.java` covers the grace period, one restore
+of the recorded mode, the explanatory failure, and the no-recorded-mode path.
+`tools/test_experimental_stereo.py` covers both EDID namespaces for force 2D
+and rejects the retired flag bytes.
+
+Not established by this export: why the Pixel 10 Pro EDID keeps only 1920 ×
+1080 after the switch. The restore makes the glasses readable without
+replugging; it does not deliver 3D on this pairing.

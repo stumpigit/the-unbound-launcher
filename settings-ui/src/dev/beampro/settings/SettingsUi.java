@@ -182,6 +182,7 @@ public final class SettingsUi {
         SignatureSwitch detectionToggle;
         boolean syncingDetection;
         SignatureSwitch stereoToggle;
+        SignatureSwitch monoToggle;
         boolean syncingStereo;
         Button launch;
         ImageView glasses;
@@ -511,7 +512,8 @@ public final class SettingsUi {
             stereoToggle.setOnCheckedChangeListener((button, enabled) -> {
                 if (syncingStereo) return;
                 try {
-                    ExperimentalStereo.save(activity, enabled);
+                    ExperimentalStereo.save(activity, enabled ? ExperimentalStereo.FORCE_3D : ExperimentalStereo.ORIGINAL);
+                    if (enabled && monoToggle != null) { syncingStereo = true; monoToggle.setChecked(false); syncingStereo = false; }
                     Toast.makeText(activity, "Reconnect your glasses to apply the change.", Toast.LENGTH_LONG).show();
                 } catch (Exception failure) {
                     syncingStereo = true;
@@ -526,6 +528,35 @@ public final class SettingsUi {
             row.subtitle.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
             row.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
             section.card.addView(row);
+            String monoDescription = "Keep glasses that default to 3D in 2D. Use this if the glasses refuse the 3D switch "
+                    + "and show a cropped half of the screen in each eye. Reconnect your glasses after changing.";
+            Row monoRow = new Row(activity, "mirror", "Force 2D on 3D glasses", monoDescription);
+            monoRow.setTag("experimental-mono");
+            monoToggle = new SignatureSwitch(activity);
+            monoToggle.setTag("force-2d-mono");
+            monoToggle.setContentDescription("Force 2D on 3D glasses. " + monoDescription);
+            LinearLayout.LayoutParams monoParams = new LinearLayout.LayoutParams(dp(52), dp(48));
+            monoParams.setMarginStart(dp(12)); monoRow.addView(monoToggle, monoParams);
+            monoToggle.setChecked(ExperimentalStereo.monoEnabled(activity));
+            monoToggle.setOnCheckedChangeListener((button, enabled) -> {
+                if (syncingStereo) return;
+                try {
+                    ExperimentalStereo.save(activity, enabled ? ExperimentalStereo.FORCE_2D : ExperimentalStereo.ORIGINAL);
+                    if (enabled && stereoToggle != null) { syncingStereo = true; stereoToggle.setChecked(false); syncingStereo = false; }
+                    Toast.makeText(activity, "Reconnect your glasses to apply the change.", Toast.LENGTH_LONG).show();
+                } catch (Exception failure) {
+                    syncingStereo = true;
+                    try { monoToggle.setChecked(ExperimentalStereo.monoEnabled(activity)); }
+                    finally { syncingStereo = false; }
+                    Log.w(TAG, "Cannot save experimental 2D setting", failure);
+                    Toast.makeText(activity, "Could not save experimental 2D. " + failure.getMessage(), Toast.LENGTH_LONG).show();
+                }
+            });
+            monoRow.onClick(v -> monoToggle.toggle());
+            monoRow.title.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            monoRow.subtitle.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            monoRow.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            section.card.addView(monoRow);
         }
 
         void about(Section section) {

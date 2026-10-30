@@ -53,7 +53,7 @@ class ExperimentalStereoTests(unittest.TestCase):
             runner.write_text('''import android.content.Context;import dev.beampro.settings.ExperimentalStereo;import java.nio.file.*;
               public class StereoChecks {
                 static class Base {Context mContext;Control mNRServiceControl=new Control();}
-                static class Manager extends Base {} static class Control {boolean isEthernetSeries;}
+                static class Manager extends Base {} static class Control {boolean isEthernetSeries;int mode=9;public int get2D3D(){return mode;}}
                 static void check(boolean value){if(!value)throw new AssertionError();}
                 public static void main(String[] args)throws Exception {
                   Context context=new Context();context.dir=new java.io.File(args[0]);Manager manager=new Manager();manager.mContext=context;
@@ -68,10 +68,22 @@ class ExperimentalStereoTests(unittest.TestCase):
                     }
                     ExperimentalStereo.save(context,false);check(!ExperimentalStereo.enabled(context));
                     for(int mode=-1;mode<16;mode++)check(ExperimentalStereo.selectConfig(mode,manager)==mode);
+                    ExperimentalStereo.save(context,ExperimentalStereo.FORCE_2D);
+                    check(ExperimentalStereo.monoEnabled(context)&&!ExperimentalStereo.enabled(context));
+                    int monoCurrent=ethernet?9:10,stereoCurrent=ethernet?5:3;
+                    for(int mode=-1;mode<16;mode++) {
+                      boolean stereo=ethernet?mode>=5&&mode<=8:mode==2||mode==3||mode==4||mode==9;
+                      manager.mNRServiceControl.mode=monoCurrent;
+                      check(ExperimentalStereo.selectConfig(mode,manager)==(stereo?monoCurrent:mode));
+                      manager.mNRServiceControl.mode=stereoCurrent;
+                      check(ExperimentalStereo.selectConfig(mode,manager)==mode);
+                    }
+                    ExperimentalStereo.save(context,ExperimentalStereo.ORIGINAL);
+                    check(ExperimentalStereo.mode(context)==0);
                   }
                   check(ExperimentalStereo.selectConfig(10,new Object())==10);
                   Path flag=context.dir.toPath().resolve("unbound-experimental-stereo");
-                  for(byte[] bad:new byte[][]{new byte[0],{2},{3},{-1},{1,1},{2,2}}) {
+                  for(byte[] bad:new byte[][]{new byte[0],{3},{-1},{1,1},{2,2}}) {
                     Files.write(flag,bad);check(!ExperimentalStereo.enabled(context));
                     for(boolean ethernet:new boolean[]{false,true}) {
                       manager.mNRServiceControl.isEthernetSeries=ethernet;
