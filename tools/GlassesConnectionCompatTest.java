@@ -29,6 +29,8 @@ public final class GlassesConnectionCompatTest {
         Handler.clear();SystemClock.now=0;ConnectionAnimation.defer=false;ConnectionHandoff.defer=false;FirmwareWarningView.last=null;
         ConnectionHandoff.last=null;ai.nreal.nebula.util.helper.DbHelpUtil.mirroring=false;
         Context.app=new Application();Context.displays=new DisplayManager();Context.manager=new ActivityManager();Context.usb=new UsbManager();
+        Context.filesDir=java.nio.file.Files.createTempDirectory("unbound-stereo").toFile();
+        new java.io.File(Context.filesDir,"unbound-experimental-stereo").delete();
         Context.usb.devices.put("glasses",new UsbDevice(13080));XREALManager.instance=new XREALManager();
         dev.beampro.settings.DebugData.events.clear();dev.beampro.settings.DebugData.fail=false;
         return new Presenter();
@@ -175,10 +177,26 @@ public final class GlassesConnectionCompatTest {
         Handler.advance(4000);
         check(m.mNRServiceControl.restored==9&&m.mNRServiceControl.set2D3DCalls==1,
                 "Restore the pre-switch 2D mode when the EDID refuses stereo");
-        check(ConnectionAnimation.last.failed&&ConnectionAnimation.last.phase.contains("2D"),
-                "The refused 3D switch explains the restored 2D output");
+        Handler.advance(2000);
+        check(m.launches==1&&!ConnectionAnimation.last.failed&&p.success==1,
+                "A refused 3D switch continues the session in 2D instead of failing");
+        check(new java.io.File(Context.filesDir,"unbound-experimental-stereo").length()==1
+                &&java.nio.file.Files.readAllBytes(new java.io.File(Context.filesDir,"unbound-experimental-stereo").toPath())[0]==2,
+                "The refused switch records Force 2D for the session so the home renders mono");
         Handler.advance(60000);
-        check(m.mNRServiceControl.set2D3DCalls==1&&m.launches==0,"A refused stereo switch restores once instead of looping");close(p);
+        check(m.mNRServiceControl.set2D3DCalls==1,"A refused stereo switch restores once instead of looping");
+        close(p);
+        check(!new java.io.File(Context.filesDir,"unbound-experimental-stereo").exists(),
+                "Dispose restores the user's stereo preference when none was set");
+
+        p=fixture();m=XREALManager.instance;m.waitingDisplay=true;m.mNRServiceControl.mode=9;
+        java.nio.file.Files.write(new java.io.File(Context.filesDir,"unbound-experimental-stereo").toPath(),new byte[]{1});
+        Context.displays.displays=new Display[]{new Display(4,true,vga,vga)};
+        GlassesConnectionCompat.begin(p);Handler.advance(0);m.mNRServiceControl.mode=5;Handler.advance(4000);Handler.advance(2000);
+        check(m.launches==1,"A refused 3D switch still starts 2D when a Force 3D preference exists");
+        close(p);
+        check(java.nio.file.Files.readAllBytes(new java.io.File(Context.filesDir,"unbound-experimental-stereo").toPath())[0]==1,
+                "Dispose puts the user's earlier Force 3D preference back");
 
         p=fixture();m=XREALManager.instance;m.waitingDisplay=true;
         Context.displays.displays=new Display[]{new Display(4,true,vga,vga)};

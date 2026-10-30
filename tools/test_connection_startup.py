@@ -67,8 +67,9 @@ STUBS.update({
       public boolean stopped;public HandlerThread(String n){}public void start(){}public Looper getLooper(){return Looper.getMainLooper();}
       public boolean quitSafely(){stopped=true;return true;}}''',
     'android/content/Context.java': '''package android.content;import android.app.*;import android.hardware.display.*;import android.hardware.usb.*;
-      public class Context {public static Application app;public static DisplayManager displays;public static ActivityManager manager;public static UsbManager usb;
+      public class Context {public static Application app;public static DisplayManager displays;public static ActivityManager manager;public static UsbManager usb;public static java.io.File filesDir;
       public Context getApplicationContext(){return app;}public String getPackageName(){return "dev.markpronkin.unbound";}
+      public java.io.File getFilesDir(){return filesDir;}
       public <T>T getSystemService(Class<T> c){return c.cast(c==DisplayManager.class?displays:c==UsbManager.class?usb:manager);}}''',
     'android/app/Activity.java': '''package android.app;import android.os.Bundle;import android.content.Intent;import android.view.*;import android.widget.*;
       public class Activity extends android.content.Context {public boolean finishing,destroyed;public Display display;public Bundle lastOptions;public Intent lastIntent;
@@ -133,7 +134,8 @@ STUBS.update({
          if(nextResult<0)return;int r=nextResult;nextResult=0;
          if(r==0){mNRServiceControl.started=true;if(!ai.nreal.nebula.util.helper.DbHelpUtil.mirroring)GlassesConnectionCompat.launch(this);}cb.onResult(r);}
        public void goLauncher(){hasGoLauncher=true;launches++;}public boolean isHasGoLauncher(){return hasGoLauncher;}
-       private int getFinalDisplayConfig(){return target;}public void unregisterGlasses(Object o){unregistered++;}
+       private int getFinalDisplayConfig(){try{java.io.File f=new java.io.File(android.content.Context.filesDir,"unbound-experimental-stereo");
+         if(f.length()==1&&java.nio.file.Files.readAllBytes(f.toPath())[0]==2)return mNRServiceControl.mode;}catch(Exception ignored){}return target;}public void unregisterGlasses(Object o){unregistered++;}
        public void lateSuccess(){if(GlassesConnectionCompat.acceptSdkCallback(callback)){GlassesConnectionCompat.launch(this);callback.onResult(0);}}
       }''',
 })

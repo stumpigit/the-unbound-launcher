@@ -351,6 +351,8 @@ public final class GlassesConnectionCompat {
         long mtpSince, readySince;
         int preEdid;
         long stereoFallbackSince;
+        byte[] savedStereoFlag;
+        boolean stereoFlagWritten;
         int resumes;
         String phase = "Waiting for glasses USB access";
         ConnectionAnimation animation;
@@ -578,17 +580,24 @@ public final class GlassesConnectionCompat {
                     if (stereo && !ready && glassesOn && !stereoModes) {
                         if (stereoFallbackSince == 0) stereoFallbackSince = SystemClock.uptimeMillis();
                         else if (SystemClock.uptimeMillis() - stereoFallbackSince >= 4000) {
-                            boolean restored = false;
-                            try {
-                                if (preEdid != 0) {
+                            boolean continued = false;
+                            if (preEdid != 0) {
+                                // Record Force 2D first so every later mode query agrees, then undo
+                                // the refused switch. The next poll sees a mono target and finishes
+                                // startup in 2D instead of failing the whole connection.
+                                forceTwoDForSession();
+                                try {
                                     call(sdk, "set2D3D", new Class<?>[]{int.class}, preEdid);
-                                    restored = true;
+                                    continued = stereoFlagWritten;
+                                } catch (Exception refused) {
+                                    Log.w(TAG, "Cannot restore the glasses 2D mode", refused);
+                                    restoreStereoFlagPreference();
                                 }
-                            } catch (Exception refused) { Log.w(TAG, "Cannot restore the glasses 2D mode", refused); }
-                            debug("stereo_fallback", "target=" + target + "; actual=" + actual + "; restoredEdid=" + preEdid);
-                            fallback = preEdid == 0
+                            }
+                            debug("stereo_fallback", "target=" + target + "; actual=" + actual
+                                    + "; restoredEdid=" + preEdid + "; continued2D=" + continued);
+                            fallback = continued ? null : preEdid == 0
                                     ? "The glasses did not switch to 3D. Reconnect them, or enable Force 2D in Settings to start in 2D."
-                                    : restored ? "The glasses did not switch to 3D, so 2D output was restored. Enable Force 2D in Settings to start in 2D directly."
                                     : "The glasses did not switch to 3D and 2D could not be restored. Reconnect them, or enable Force 2D in Settings.";
                         }
                     } else stereoFallbackSince = 0;
@@ -702,6 +711,32 @@ public final class GlassesConnectionCompat {
                 button.setVisibility(View.VISIBLE);
             } catch (Exception error) { Log.e(TAG, "Cannot show connection recovery", error); }
         }
+        /** Write the Settings Force 2D preference for the duration of this session. */
+        boolean forceTwoDForSession() {
+            try {
+                java.io.File flag = new java.io.File(activity.getFilesDir(), "unbound-experimental-stereo");
+                savedStereoFlag = flag.exists() ? java.nio.file.Files.readAllBytes(flag.toPath()) : null;
+                java.io.File temp = new java.io.File(flag.getParentFile(), flag.getName() + ".tmp");
+                try (java.io.FileOutputStream out = new java.io.FileOutputStream(temp)) { out.write(2); }
+                flag.delete();
+                stereoFlagWritten = temp.renameTo(flag);
+                if (!stereoFlagWritten) temp.delete();
+            } catch (Exception error) {
+                Log.w(TAG, "Cannot record the 2D preference for this session", error);
+                stereoFlagWritten = false;
+            }
+            return stereoFlagWritten;
+        }
+        /** Undo forceTwoDForSession so the user's own preference survives the session. */
+        void restoreStereoFlagPreference() {
+            if (!stereoFlagWritten) return;
+            stereoFlagWritten = false;
+            try {
+                java.io.File flag = new java.io.File(activity.getFilesDir(), "unbound-experimental-stereo");
+                if (savedStereoFlag == null) flag.delete();
+                else try (java.io.FileOutputStream out = new java.io.FileOutputStream(flag)) { out.write(savedStereoFlag); }
+            } catch (Exception error) { Log.w(TAG, "Cannot restore the stereo preference", error); }
+        }
         void close() {
             if (!success) debug("cancel", "Connection screen closed");
             if (!success) blocked.put(manager, true);
@@ -713,6 +748,7 @@ public final class GlassesConnectionCompat {
             if (disposed) return;
             debug("dispose", "Connection disposed; success=" + success);
             disposed = true;
+            restoreStereoFlagPreference();
             firmwareWarning=null;
             if (handoff != null) handoff.close(!success);
             if (animation != null) { animation.dispose(); animation = null; }
