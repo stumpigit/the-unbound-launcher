@@ -4,7 +4,7 @@ import hashlib
 from xreal_telemetry import file_offset
 
 # After color, tutorial, stereo, overlay and app-surface patches, before identity.
-BASELINE_SHA256 = "02ab031416fb329f0df8fb0c4e1b7bdf2542cd940c9c26a1f027c1e9e884258f"
+BASELINE_SHA256 = "c6c9142d4b4f582511b559f168c451a73b40e57a4d8000a8fe2e4b7b3894b090"
 BEGIN = 0xF0A018
 UPDATE = 0xF0A0AC
 TARGETS = (
