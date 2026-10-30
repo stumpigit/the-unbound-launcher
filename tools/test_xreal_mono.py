@@ -4,7 +4,12 @@ import unittest
 import zipfile
 from pathlib import Path
 
-from xreal_mono import LIBRARY, patch_xreal_mono, patch_xreal_stereo_transport_mono_renderer
+from xreal_mono import (
+    LIBRARY,
+    patch_xreal_mono,
+    patch_xreal_stereo_stitch_renderer,
+    patch_xreal_stereo_transport_mono_renderer,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 BASE = ROOT / "artifacts/unbound-launcher-help/the-unbound-launcher.apk"
@@ -35,6 +40,22 @@ class XrealMonoTests(unittest.TestCase):
         changed = [i for i, (old, new) in enumerate(zip(self.original, patched)) if old != new]
         self.assertGreaterEqual(min(changed), 0xC58A4)
         self.assertLess(max(changed), 0xC58A8)
+
+    def test_stereo_stitch_preserves_two_views_but_splits_center_frustum(self):
+        patched = patch_xreal_stereo_stitch_renderer(self.original)
+        expected = {
+            0xC6FB0: "c1008052",
+            0xC6FC8: "680a052d",
+            0xC7010: "c1008052",
+            0xC7028: "6226142d",
+        }
+        for offset, encoded in expected.items():
+            self.assertEqual(patched[offset:offset + 4].hex(), encoded)
+        changed_words = {
+            offset for offset in range(0, len(patched), 4)
+            if patched[offset:offset + 4] != self.original[offset:offset + 4]
+        }
+        self.assertEqual(changed_words, set(expected))
 
     def test_rejects_unknown_or_already_patched_library(self):
         patched = patch_xreal_mono(self.original)
